@@ -116,15 +116,3 @@ fig_premium = px.line(
     title="Daily Black-Scholes Net Spread Premium"
 )
 fig_premium.show()
-
-# Return % line chart
-fig_return = px.line(
-    data_frame=call_spread_return_pct,
-    title="Bull Call Spread Return % using Daily Black-Scholes Premium",
-    labels={
-        "value": "Return (%)",
-        "Date": "Date",
-        "variable": "Ticker"
-    }
-)
-fig_return.show()
