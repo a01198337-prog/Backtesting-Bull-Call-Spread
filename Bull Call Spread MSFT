@@ -1,63 +1,130 @@
-#Packages
+# Packages
 import numpy as np
 import pandas as pd
-import matplotlib as plt
 import yfinance as yf
 import plotly.express as px
+from scipy.stats import norm
 
-#Tenor in number of years
-tenor = 1
-#Strike in percentages (i.e. 0.8 = 80% of Initial Spot Price). Both Lower & Upper Strike
+# Parameters
+tenor_days = 126
+T = tenor_days / 252
+
 buy_call_strike = 1.055
 sell_call_strike = 1.328
-#Cost of the option/warrant (i.e. Premium for Option should be in price while Warrant should be in percentages)
-premium = 0.06
-#Basket of Stocks we want to test
-stock_basket = ['AAPL','MSFT','PANW']
-#Is this an Option or Warrant?
-Format = "Option"
 
-#Download the stock price for stocks
-data = yf.download(stock_basket, period='5y', Interval='1d')
+stock_basket = ['AAPL', 'MSFT', 'PANW']
+
+risk_free_rate = 0.04
+dividend_yield = 0.00
+
+vol_window = 126
+
+# Download stock prices
+data = yf.download(stock_basket, period='5y', interval='1d', auto_adjust=True)
+
 close_data = data['Close']
 
-#Create a Strike Value Dataset
-buy_call_strike_data = (close_data*buy_call_strike)
-sell_call_strike_data = (close_data*sell_call_strike)
+# Daily returns
+daily_returns = close_data.pct_change()
 
-#Final Price for each option by creating a dataset with the tenor shifted up
-final_close_data = close_data.shift(-252*tenor)
+# Rolling annualized volatility
+rolling_vol = daily_returns.rolling(vol_window).std() * np.sqrt(252)
 
-#Print out what is the Call Spread Category
-if buy_call_strike > sell_call_strike:
-    print("This is a BEAR CALL SPREAD " + Format)
-else:
-    print("This is a BULL CALL SPREAD " + Format)
+# Strike prices
+K1 = close_data * buy_call_strike
+K2 = close_data * sell_call_strike
 
-#Create the backtest data based on whether it is an Option or Warrant
-if Format == "Option":
-    call_spread_backtest = ((final_close_data - buy_call_strike_data).clip(lower=0)
-                            +(sell_call_strike_data - final_close_data).clip(upper=0))+premium
-else:
-    call_spread_backtest = (((final_close_data - buy_call_strike_data).clip(lower=0)
-                            +(sell_call_strike_data - final_close_data).clip(upper=0))/close_data)+premium
+# Final price after 126 trading days
+ST = close_data.shift(-tenor_days)
 
-#Remove all N/A datapoints
-call_spread_backtest = call_spread_backtest.iloc[:-252*tenor]  
+# Black-Scholes function
+def black_scholes_call(S, K, r, q, sigma, T):
+    d1 = (np.log(S / K) + (r - q + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
 
+    call_price = S * np.exp(-q * T) * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
 
-#Line graph of the backtest data
-call_spread_backtest_chart = px.line(data_frame = call_spread_backtest)
-call_spread_backtest_chart.show()
-#Summary statistics on the backtest
-call_spread_backtest_describe = call_spread_backtest.describe()
-call_spread_backtest_describe
+    return call_price
 
+# Daily Black-Scholes premiums
+call_K1 = black_scholes_call(
+    S=close_data,
+    K=K1,
+    r=risk_free_rate,
+    q=dividend_yield,
+    sigma=rolling_vol,
+    T=T
+)
 
-#Box & Whisker Graph
-call_spread_backtest_box = px.box(data_frame = call_spread_backtest)
-call_spread_backtest_box.show()
+call_K2 = black_scholes_call(
+    S=close_data,
+    K=K2,
+    r=risk_free_rate,
+    q=dividend_yield,
+    sigma=rolling_vol,
+    T=T
+)
 
-#Histogram
-call_spread_backtest_histogram = px.histogram(data_frame = call_spread_backtest, nbins=10, barmode='group')
-call_spread_backtest_histogram.show()
+# Net premium paid for the bull call spread
+net_spread_premium = call_K1 - call_K2
+
+# Payoff at maturity
+spread_payoff = (
+    (ST - K1).clip(lower=0)
+    - (ST - K2).clip(lower=0)
+)
+
+# Return on option premium
+call_spread_return_pct = ((spread_payoff - net_spread_premium) / net_spread_premium) * 100
+
+# Clean final data
+call_spread_return_pct = call_spread_return_pct.iloc[vol_window:-tenor_days]
+net_spread_premium = net_spread_premium.iloc[vol_window:-tenor_days]
+spread_payoff = spread_payoff.iloc[vol_window:-tenor_days]
+
+print("This is a BULL CALL SPREAD Option using daily Black-Scholes pricing")
+
+# Summary statistics
+print(call_spread_return_pct.describe())
+
+# Line chart
+fig_line = px.line(
+    data_frame=call_spread_return_pct,
+    title="Bull Call Spread Return % using Daily Black-Scholes Premium"
+)
+fig_line.show()
+
+# Boxplot
+fig_box = px.box(
+    data_frame=call_spread_return_pct,
+    title="Bull Call Spread Return % Distribution"
+)
+fig_box.show()
+
+# Histogram
+fig_hist = px.histogram(
+    data_frame=call_spread_return_pct,
+    nbins=20,
+    barmode='group',
+    title="Bull Call Spread Return % Histogram"
+)
+fig_hist.show()
+
+# Optional: premium chart
+fig_premium = px.line(
+    data_frame=net_spread_premium,
+    title="Daily Black-Scholes Net Spread Premium"
+)
+fig_premium.show()
+
+# Return % line chart
+fig_return = px.line(
+    data_frame=call_spread_return_pct,
+    title="Bull Call Spread Return % using Daily Black-Scholes Premium",
+    labels={
+        "value": "Return (%)",
+        "Date": "Date",
+        "variable": "Ticker"
+    }
+)
+fig_return.show()
