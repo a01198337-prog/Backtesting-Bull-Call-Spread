@@ -8,17 +8,17 @@ import plotly.express as px
 #Tenor in number of years
 tenor = 1
 #Strike in percentages (i.e. 0.8 = 80% of Initial Spot Price). Both Lower & Upper Strike
-buy_call_strike = 1.2
-sell_call_strike = 0.8
+buy_call_strike = 1.055
+sell_call_strike = 1.328
 #Cost of the option/warrant (i.e. Premium for Option should be in price while Warrant should be in percentages)
 premium = 0.06
 #Basket of Stocks we want to test
-stock_basket = ['AMZN','NVDA','MSFT','GOOGL']
+stock_basket = ['AAPL','MSFT','PANW']
 #Is this an Option or Warrant?
-Format = "Warrant"
+Format = "Option"
 
 #Download the stock price for stocks
-data = yf.download(stock_basket, period='15y', Interval='1d')
+data = yf.download(stock_basket, period='5y', Interval='1d')
 close_data = data['Close']
 
 #Create a Strike Value Dataset
