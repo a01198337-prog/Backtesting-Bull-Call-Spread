@@ -1,0 +1,63 @@
+#Packages
+import numpy as np
+import pandas as pd
+import matplotlib as plt
+import yfinance as yf
+import plotly.express as px
+
+#Tenor in number of years
+tenor = 1
+#Strike in percentages (i.e. 0.8 = 80% of Initial Spot Price). Both Lower & Upper Strike
+buy_call_strike = 1.2
+sell_call_strike = 0.8
+#Cost of the option/warrant (i.e. Premium for Option should be in price while Warrant should be in percentages)
+premium = 0.06
+#Basket of Stocks we want to test
+stock_basket = ['AMZN','NVDA','MSFT','GOOGL']
+#Is this an Option or Warrant?
+Format = "Warrant"
+
+#Download the stock price for stocks
+data = yf.download(stock_basket, period='15y', Interval='1d')
+close_data = data['Close']
+
+#Create a Strike Value Dataset
+buy_call_strike_data = (close_data*buy_call_strike)
+sell_call_strike_data = (close_data*sell_call_strike)
+
+#Final Price for each option by creating a dataset with the tenor shifted up
+final_close_data = close_data.shift(-252*tenor)
+
+#Print out what is the Call Spread Category
+if buy_call_strike > sell_call_strike:
+    print("This is a BEAR CALL SPREAD " + Format)
+else:
+    print("This is a BULL CALL SPREAD " + Format)
+
+#Create the backtest data based on whether it is an Option or Warrant
+if Format == "Option":
+    call_spread_backtest = ((final_close_data - buy_call_strike_data).clip(lower=0)
+                            +(sell_call_strike_data - final_close_data).clip(upper=0))+premium
+else:
+    call_spread_backtest = (((final_close_data - buy_call_strike_data).clip(lower=0)
+                            +(sell_call_strike_data - final_close_data).clip(upper=0))/close_data)+premium
+
+#Remove all N/A datapoints
+call_spread_backtest = call_spread_backtest.iloc[:-252*tenor]  
+
+
+#Line graph of the backtest data
+call_spread_backtest_chart = px.line(data_frame = call_spread_backtest)
+call_spread_backtest_chart.show()
+#Summary statistics on the backtest
+call_spread_backtest_describe = call_spread_backtest.describe()
+call_spread_backtest_describe
+
+
+#Box & Whisker Graph
+call_spread_backtest_box = px.box(data_frame = call_spread_backtest)
+call_spread_backtest_box.show()
+
+#Histogram
+call_spread_backtest_histogram = px.histogram(data_frame = call_spread_backtest, nbins=10, barmode='group')
+call_spread_backtest_histogram.show()
